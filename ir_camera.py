@@ -1,7 +1,5 @@
-from time import sleep
-import busio
 import board
-import digitalio
+import busio
 import adafruit_amg88xx
 import neopixel
 
@@ -13,12 +11,7 @@ amg = adafruit_amg88xx.AMG88XX(i2c)
 pixel_pin = board.D5
 num_pixels = 72 # 64 LEDs on 8x8 matrix and 8 LEDs on temperature scale display
 ORDER = neopixel.GRB
-pixels = neopixel.NeoPixel(pixel_pin, num_pixels, brightness=0.05, auto_write=False, pixel_order=ORDER)
-
-# Initialize button used for temperautr scale change
-scale_btn = digitalio.DigitalInOut(board.D10)
-scale_btn.direction = digitalio.Direction.INPUT
-scale_btn.pull = digitalio.Pull.UP
+pixels = neopixel.NeoPixel(pixel_pin, num_pixels, brightness=0.1, auto_write=False, pixel_order=ORDER)
 
 # Define pixel numbers map for RGB matrix
 screen_map = []
@@ -29,18 +22,19 @@ for row in range(8):
     screen_map.append(row_table)
 
 # Define pixel numbers map for temperature scale display
-temp_scale_map = [i for i in range(71, 63, -1)]
+temp_scale_map = [i for i in range(64, 73)]
 
 # Define maximal temperature
 temp_max = 30
 
-# Change maximal temperature when button is pressed
-def update_temp_max():
+# Change maximal temperature when encoder is rotated
+def update_temp_max(change):
     global temp_max
-    temp_max = temp_max + 10
+    temp_max = temp_max + 10 * change
     if temp_max > 80:
+        temp_max = 80
+    elif temp_max < 10:
         temp_max = 10
-    return temp_max
 
 def get_temp():
     """
@@ -64,8 +58,19 @@ def normalize(value):
     else:
         return value
 
+# There is a bug in adafruit_AMG88xx library
+# which cause that negative temperatures are read
+# as values above 500 deg. C
+# https://forums.adafruit.com/viewtopic.php?f=8&t=127137
+def normalize_temp(temp):
+    if temp > 450:
+        return 0.0
+    else:
+        return temp
+
 # Calculate colour for given temperature
 def convert_temp(temp, temp_max, step):
+    temp = normalize_temp(temp)
     red = normalize(int(255 - (temp_max - temp) * step))
     blue = normalize(int(255 - temp * step))
     if red:
@@ -99,3 +104,7 @@ def set_matrix():
         for j in range(8): # get consecutive pixels
             pixels[screen_map[i][j]] = colours[i][j]
     pixels.show()
+
+def send_temperatures():
+    temperatures = get_temp()
+    print(temperatures)
